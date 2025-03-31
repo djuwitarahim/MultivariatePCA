@@ -1,0 +1,253 @@
+---
+title: "Formative Assignment: Summarising Multivariate Data and PCA"
+author: "240609924"
+output: 
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, results = 'hide')
+```
+
+### 1. Introduction
+
+This report analyses the airpollution dataset, which contains measurements from 80 US cities in 1960 across 11 variables, including air pollution concentrations and demographic indicators. The objective of this analysis is to provide numerical and graphical summaries of the data, compute key statistical measures such as total variation and generalised variance, and explore the underlying structure of the dataset using Principal Component Analysis (PCA). By systematically evaluating the data, the report aims to highlight key patterns and relationships among variables, assess the suitability of standardisation for PCA, and identify the most influential principal components that encapsulate the dataset's variability. These insights provide a foundation for interpreting environmental and demographic trends while demonstrating effective application of multivariate techniques.
+
+### 2. Exploratory Data Analysis (EDA)
+
+In this part, we aim to understand the structure of the airpollution dataset by generating numerical summaries and visualising the relationships among variables. We will calculate key statistics such as means, standard deviations, and ranges for each variable and assess their distributions using histograms and scatterplot matrices. 
+
+```{r}
+#install.packages("nclSLR", repos = "http://R-Forge.R-project.org")
+#install.packages("knitr")
+#install.packages("kableExtra")
+#install.packages("tinytex")
+#install.packages("xfun")
+library(nclSLR)
+library(knitr)
+library(kableExtra)
+library(corrplot)
+library(ggplot2)
+data(airpollution)
+```
+
+### 2.1 Numerical Summaries
+
+```{r, results='asis'}
+summary_stats <- data.frame(
+  Mean = colMeans(airpollution, na.rm = TRUE),
+  SD = apply(airpollution, 2, sd, na.rm = TRUE),
+  Min = apply(airpollution, 2, min, na.rm = TRUE),
+  Max = apply(airpollution, 2, max, na.rm = TRUE)
+)
+
+kable(summary_stats, 
+      caption = "Summary Statistics for Air Pollution Variables") %>%
+  kable_styling(latex_options = c("striped", "hold_position"), 
+                full_width = FALSE, font_size = 9)
+```
+
+Table 1 summarises the key statistics for the air pollution variables, which we calculated using functions like `colMeans()`, `apply()`, and `summary()` to understand the central tendency, variability, and range of each variable across all cities. The table includes variables such as sulphate concentrations (SMIN, SMEAN, SMAX), particulate matter levels (PMIN, PMEAN, PMAX), and demographic indicators (e.g., PERWH, NONPOOR, GE65). From our calculations, we observed that PMAX has the highest variability, with a standard deviation of 159.09, while LPOP shows the lowest variability, reflecting a more uniform distribution of population logs. These statistics allowed us to identify notable trends, such as significant differences in air pollution levels and demographic distributions, which are critical for our subsequent exploratory and principal component analyses.
+
+```{r, results='asis'}
+kable(data.frame(airpollution)[1:10, ],
+      caption = "Air Pollution Data by City (First 10 Rows)") %>%
+ kable_styling(latex_options = c("striped", "hold_position"), 
+                full_width = FALSE, font_size = 9) %>%
+  column_spec(1, width = "1cm") %>%
+  column_spec(2:ncol(airpollution) + 1, width = "1cm")
+```
+
+Table 2 showcases the air pollution and demographic data for the first 10 cities, which we extracted using the `head()` function to gain a quick overview of the dataset. By including these variables, we explored the variability across cities; for instance, JERSEYC stands out with the highest PM2 value (1357.2), indicating severe air pollution levels compared to other cities. Additionally, we noticed differences in demographic variables, such as PROVIDEN having one of the highest NONPOOR percentages, at 83.9%. This step helps us understand both environmental and social dimensions of the data, providing a foundation for further analysis.
+
+### 2.2 Graphical Summaries
+
+Figure 1 displays histograms for all variables in the air pollution dataset, created using the `hist()` function to explore their individual distributions. These histograms reveal key patterns in the data. For example, SMIN, SMEAN, and SMAX display right-skewed distributions, indicating that most cities have lower levels, but a few cities experience significantly higher concentrations. Similarly, PM2 shows a heavily right-skewed pattern, reflecting extreme particulate matter values in certain cities. On the other hand, demographic variables like PERWH and NONPOOR have more uniform or slightly left-skewed distributions, with most cities showing high percentages of white and non-poor populations. Interestingly, GE65 (percentage of population aged 65+) and LPOP (log population) demonstrate relatively symmetric distributions.
+
+```{r, fig.cap="Air Pollution Distribution", fig.pos='H', fig.align='center'}
+par(mfrow = c(3, 4))
+for (i in 1:ncol(airpollution)) {
+  hist(airpollution[, i], main = colnames(airpollution)[i], 
+       xlab = colnames(airpollution)[i], col = "skyblue", border = "black")
+}
+```
+
+Figure 2 displays a scatterplot matrix focusing on sulphate concentrations (SMIN, SMEAN, SMAX) and particulate matter levels (PMIN, PMEAN, PMAX) to investigate relationships between these air pollution variables. The plots reveal strong positive correlations within each category of variables. For example, SMEAN and SMAX, representing average and maximum sulphate concentrations, show a clear linear relationship, suggesting that cities with higher average sulphate levels also experience higher peak values. Similarly, PMEAN and PMAX exhibit a similar pattern for particulate matter. However, the relationships between sulphate concentrations and particulate matter levels are weaker, indicating that while both measure pollution, they may be driven by different sources or environmental factors. This matrix provides a focused view of interactions within and between the key pollution metrics, enhancing our understanding of their distribution and correlation.
+
+```{r, fig.cap="Subset of Air Pollution Variable", fig.pos='H', fig.align='center'}
+pairs(airpollution[, c("SMIN", "SMEAN", "SMAX", "PMIN", "PMEAN", "PMAX")],
+      pch = 19,
+      cex = 0.5,
+      col = "darkblue")
+```
+
+Figure 3 presents a correlation heatmap for the air pollution and demographic variables, offering a concise and visually intuitive summary of relationships between variables. The size and colour of the circles indicate the strength and direction of correlations, with darker blue circles representing strong positive correlations, while red circles (not visible here) would represent negative correlations.
+
+From the heatmap, we observe strong positive correlations within the sulphate concentration variables (SMIN, SMEAN, SMAX) and within particulate matter levels (PMIN, PMEAN, PMAX), confirming the findings from the scatterplot matrix. However, it also provides additional clarity about weaker correlations between these two groups of variables. For instance, while PM2 shows moderate correlations with PMAX and PMEAN, its relationship with sulphate variables is weak. Demographic variables like PERWH and NONPOOR exhibit limited correlation with the pollution metrics, except for some mild relationships with LPOP. LPOP itself shows a negative correlation with PERWH, indicating that cities with higher log population tend to have lower percentages of white residents.
+
+```{r, fig.cap="Correlation Heatmap for Air Pollution Variables", fig.pos='H', fig.align='center'}
+corrplot(cor(airpollution), method = "circle", type = "upper", tl.col = "black", tl.cex = 0.8)
+```
+
+### 3. Statistical Computation and Standardisation
+
+To compute the total variation and generalised variance of the dataset, we first calculated the covariance matrix using the `cov()` function. The total variation, derived as the sum of the diagonal elements of the covariance matrix using `sum(diag(cov_matrix))`, resulted in **69577.97**, reflecting the overall spread of the variables. Next, we computed the generalised variance using the determinant of the covariance matrix with `det(cov_matrix)`, which yielded **8.72131e+29**, indicating substantial multivariate variability. These calculations confirm the high variability present in the dataset, particularly among air pollution variables like PMAX and SMAX, which contribute significantly to the total spread.
+
+
+```{r, results='asis'}
+cov_matrix <- cov(airpollution)
+total_variation <- sum(diag(cov_matrix))
+generalised_variance <- det(cov_matrix)
+
+results_table <- data.frame(
+  Metric = c("Total Variation", "Generalised Variance"),
+  Value = c(total_variation, generalised_variance)
+)
+
+kable(results_table,
+      caption = "Total Variation and Generalised Variance") %>%
+   kable_styling(latex_options = c("striped", "hold_position"), 
+                full_width = FALSE, font_size = 9)
+```
+
+### 3.1 Mean Vector
+
+Table 4 presents the mean vector of the variance-scaled data, where each variable was scaled to have unit variance while retaining its original mean. To achieve this, we used the `scale()` function with the `center = FALSE` argument, ensuring that the variables were not mean-centered but were adjusted for variance. This approach allowed us to preserve the original means of the variables, as shown in the table, while ensuring that all variables contribute equally to subsequent analyses such as PCA. The resulting mean values, such as **0.8379** for SMIN and **0.9915** for LPOP, reflect the original dataset's structure, providing a balance between standardisation and retaining interpretability. This variance-scaling method ensures comparability across variables without losing the context provided by their original averages.
+
+```{r}
+standardised_data <- scale(airpollution)
+cov_standardised <- cov(standardised_data)
+variance_scaled_data <- scale(airpollution, center = FALSE, scale = TRUE)
+mean_vector <- colMeans(variance_scaled_data)
+covariance_matrix <- cov(variance_scaled_data)
+correlation_matrix <- cor(airpollution)
+```
+
+```{r, results='asis'}
+mean_vector_table <- data.frame(Mean = mean_vector)
+
+kable(mean_vector_table,
+      caption = "Mean Vector of Variance-Scaled Data") %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"), 
+                full_width = FALSE, font_size = 9)
+```
+
+### 3.2 Covariance Matrix
+
+```{r, results='asis'}
+cov_matrix <- cov(airpollution)
+cov_matrix_df <- round(as.data.frame(cov(airpollution)), 2)
+
+kable(cov_matrix_df, 
+      caption = "Covariance Matrix of Air Pollution Variables") %>%
+  kable_styling(latex_options = c("striped", "scale_down", "hold_position"),
+                full_width = FALSE, font_size = 9) %>%
+  column_spec(1, width = "1cm") %>% 
+  column_spec(2:ncol(cov_matrix_df), width = "1cm")
+```
+
+Table 5 summarises the covariance matrix for the air pollution dataset, calculated using the `cov()` function to measure how variables co-vary. The results were rounded to two decimal places using the `round()` function for better readability. Strong positive covariances, such as 5036.06 between SMEAN (mean sulphate concentration) and SMAX (maximum sulphate concentration), indicate a significant linear relationship. Conversely, near-zero covariances, like -8.26 between SMIN (minimum sulphate concentration) and PMAX (maximum particulate matter level), suggest minimal association. These findings provide valuable insights into how variables vary together, laying the groundwork for further multivariate analysis, such as Principal Component Analysis (PCA).
+
+### 3.3 Correlation Matrix
+
+```{r, results='asis'}
+cor_matrix <- cor(airpollution)
+cor_matrix_df <- round(as.data.frame(cor_matrix), 2)
+kable(cor_matrix_df, 
+      caption = "Correlation Matrix of Air Pollution Variables") %>%
+  kable_styling(latex_options = c("striped", "scale_down", "hold_position"),
+                full_width = FALSE, font_size = 9) %>%
+  column_spec(1, width = "1cm") %>%  
+  column_spec(2:ncol(cor_matrix_df), width = "1cm")
+```
+
+Table 6 displays the correlation matrix, computed with the `cor()` function to quantify the strength and direction of linear relationships between variables. The matrix was also rounded to two decimal places for clarity. Key findings include strong positive correlations, such as 0.83 between SMEAN and SMAX, and 0.86 between PMEAN and PMAX, reflecting consistent patterns within related variables. Weak or negligible correlations, such as 0.00 between SMIN and PMAX, highlight independent variable behavior. This matrix offers a comprehensive view of variable interdependencies, essential for identifying patterns and relationships in PCA.
+
+To verify the accuracy of the standardisation process, we compare the covariance matrix of the standardised data to the correlation matrix of the original data. Standardisation transforms the data to have a mean of 0 and a standard deviation of 1, effectively removing the influence of units or scales. As a result, the covariance matrix of the standardised data should match the correlation matrix of the original data. To ensure this, we use the `all.equal()` function, which performs an element-wise comparison of the two matrices and returns TRUE if they are identical. This step serves as a validation checkpoint to confirm that the data has been correctly prepared for subsequent analyses, such as PCA.
+
+```{r}
+are_equal <- all.equal(cov_standardised, cor(airpollution))
+cat("Are the covariance matrix of standardised data and correlation matrix of original data equal?", are_equal, "\n")
+```
+
+The output of the code confirms that the covariance matrix of the standardised data is indeed equal to the correlation matrix of the original data, as indicated by the result **TRUE**. This verification demonstrates that the standardisation process was performed correctly, and the data is now in a consistent and comparable format. This alignment ensures the integrity of subsequent multivariate analyses, particularly PCA, which often relies on a correlation or covariance matrix to identify patterns and reduce dimensionality effectively.
+
+### **4. Principal Component Analysis (PCA)**
+
+### 4.1 Standardisation vs Raw Data for PCA
+
+PCA should be based on the **standardised data** due to the differing units and scales of the variables in the air pollution dataset. The dataset contains variables such as sulphate concentrations (e.g., SMIN, SMEAN, SMAX) measured in micrograms per cubic meter, particulate matter levels (e.g., PMIN, PMEAN, PMAX), and demographic indicators (e.g., PERWH, NONPOOR, GE65) represented as percentages or population measures. These variables are inherently on different scales, where some may exhibit larger ranges or variances compared to others. For example, PM2 (particulate matter levels) might have values spanning thousands, while demographic variables like LPOP (log population) are relatively small. 
+
+Standardisation addresses this disparity by transforming all variables to have a mean of 0 and a standard deviation of 1, effectively removing the influence of scale and ensuring each variable contributes equally to the PCA. This is crucial because PCA identifies patterns based on variances; variables with larger variances or units would dominate the principal components if left unstandardised, leading to results biased toward those variables. By standardising, PCA highlights the true relationships between variables, independent of their scales or units, allowing for a more balanced and meaningful dimensionality reduction. In summary, standardising the data ensures fairness and comparability among variables, enabling PCA to extract components that truly represent the underlying structure of the dataset rather than being skewed by variables with larger numerical ranges or variances.
+
+### 4.2 Performing PCA and Interpreting the Principal Components
+
+```{r, results='asis'}
+pca_result <- prcomp(airpollution, scale. = TRUE)
+
+pc1 <- pca_result$rotation[, 1]
+pc2 <- pca_result$rotation[, 2]
+
+pc_table <- data.frame(
+  PC1 = round(pc1, 2),
+  PC2 = round(pc2, 2)
+)
+
+kable(pc_table,
+      caption = "Loadings of the First Two Principal Components") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE, font_size = 9)
+```
+
+Table 7 presents the loadings of the first two principal components (PC1 and PC2) derived from the Principal Component Analysis (PCA) on the air pollution dataset. These loadings represent the contribution of each variable to the respective principal component. **PC1** is primarily associated with sulphate and particulate matter variables (e.g., SMEAN, SMAX, and PMEAN) with relatively high positive loadings (e.g., SMEAN at 0.45 and SMAX at 0.40), indicating that it captures overall pollution levels. In contrast, **PC2** highlights socio-demographic factors, as evidenced by high positive loadings for PERWH (0.46), NONPOOR (0.37), and GE65 (0.54), suggesting it reflects demographic patterns such as population characteristics. Negative loadings for PMIN (-0.23) and PMEAN (-0.34) in PC2 suggest an inverse relationship with certain pollution metrics. These interpretations provide insights into the primary dimensions of variability in the dataset: PC1 summarises pollution intensity, while PC2 captures socio-demographic variability across cities.
+
+### 4.3 Determining the Number of Principal Components to Retain
+
+```{r, results='asis'}
+# Variance explained by each principal component
+explained_variance <- summary(pca_result)$importance[2, ]
+cumulative_variance <- summary(pca_result)$importance[3, ]
+
+# Create a table for explained variance
+variance_table <- data.frame(
+  Explained_Variance = round(explained_variance, 2),
+  Cumulative_Variance = round(cumulative_variance, 2)
+)
+
+# Render the table
+kable(variance_table,
+      caption = "Explained and Cumulative Variance by Principal Components") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE, font_size = 9)
+
+```
+
+Table 8 summarises the explained variance and cumulative variance for each principal component (PC) derived from the PCA. **PC1** explains the largest proportion of variance (35%), followed by **PC2** (17%), together accounting for 52% of the total variance. By including **PC3** (13%), the cumulative variance increases to 65%, indicating that the first three components capture the majority of the variability in the dataset. Components beyond PC3 contribute less than 10% individually, with diminishing returns on the variance explained. Based on the "elbow rule" and the goal of retaining at least 70-80% of cumulative variance, it is reasonable to recommend using the first three principal components for this analysis. This ensures that most of the dataset's variability is captured while avoiding overfitting by including components that contribute minimally to the variance.
+
+### 4.4 Visualising the Principal Components
+
+```{r, fig.cap="Subset of Air Pollution Variable", fig.pos='H', fig.align='center'}
+pca_data <- data.frame(
+  City = rownames(airpollution),
+  PC1 = pca_result$x[, 1],
+  PC2 = pca_result$x[, 2]
+)
+
+ggplot(pca_data, aes(x = PC1, y = PC2, label = City)) +
+  geom_point(color = "darkblue", size = 2) +
+  geom_text(nudge_x = 0.5, nudge_y = 0.5, size = 2) +
+  labs(
+    x = "First Principal Component",
+    y = "Second Principal Component"
+  ) +
+  theme_minimal()
+```
+
+Figure 4 illustrates the scatter plot of the first two principal components (PC1 and PC2) for the air pollution dataset, with each point representing a city and labelled accordingly. The x-axis corresponds to **PC1**, which primarily captures overall pollution levels, while the y-axis corresponds to **PC2**, associated with socio-demographic factors. Cities like **JERSEYC** and **CHARLEST** stand out as outliers, with **JERSEYC** having the highest PC1 value, indicating extreme pollution levels, and **CHARLEST** showing a distinctive demographic profile. Most cities cluster near the origin, suggesting similar moderate values for both components.
+
+### 5. Conclusions
+
+The analysis revealed significant variability in air pollution levels and demographic characteristics across 80 U.S. cities. Sulphate concentrations and particulate matter levels showed substantial differences, with certain cities like JERSEYC exhibiting extreme pollution levels. Socio-demographic factors, such as the percentage of white and non-poor populations, also varied, contributing to distinct profiles for different cities. 
+
+Principal Component Analysis (PCA) highlighted two main dimensions of variability: PC1 captured overall pollution intensity, while PC2 reflected socio-demographic characteristics. The first three principal components explained 65% of the dataset's variance, effectively summarising key patterns. The scatter plot of PC1 and PC2 revealed clusters of cities with similar profiles and identified notable outliers, such as JERSEYC and CHARLEST. These findings provide a deeper understanding of the dataset, enabling targeted strategies to address environmental and demographic disparities.
